@@ -20,7 +20,7 @@ lambda=(2*G*nu)/(1-2*nu);
 
 
 %% construct the grid
-nz=200;nx=200; %nb of elements
+nz=400;nx=400; %nb of elements
 x=linspace(0,0.3,nx);
 z=linspace(0,0.3,nz);
 dx=abs(x(2)-x(1));
@@ -125,7 +125,15 @@ figure(2)
 % surf(posrup,'edgecolor','none');view(2)
 [t1,x1]=find(posrup==-1);
 [t2,x2]=find(posrup==1);
+
+x22=interp1(t2,x2,t1);
 plot(t1,x1,t2,x2)
+figure(3)
+subplot(211)
+length_ck=smooth(abs(x22-x1)*dx/2,7);
+plot(t1*dt,length_ck)
+subplot(212)
+plot(t1(1:end-1)*dt,diff(length_ck)/dt)
 % figure(3)
 % plot(t1,(x1-x2))
 % close(myVideo)
