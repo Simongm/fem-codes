@@ -55,19 +55,18 @@ amp=1*exp(-f0^2*(t-t0).^2); amp=amp-amp(1);
 %% prestress to start dynamic rupt
 size_patch=0.008; % size half patch in m
 nb_pt_patch=round(size_patch/dx);
-nxs=round(nx/2);nzs=round(nz/2);Dc=0.085e-5;
-rup=zeros(1,nx);friction=zeros(1,nx);
-prestress(1:nx)=1.7*10^6;prestress(nxs-nb_pt_patch:nxs+nb_pt_patch)=1.8001*10^6;peak(1:nz)=1.8e6;
+nxs=round(nx/2);nzs=round(nz/2);Dc=0.1e-5;tau_0=1.5e6;tau_p=1.8e6;
+rup=zeros(1,nx);posrup=zeros(nt,nx-1);
+prestress(1:nx)=tau_0;prestress(nxs-nb_pt_patch:nxs+nb_pt_patch)=1.8001*10^6;
 u_interface_old=zeros(1,nx);
-mu_d=0.8; %actually coresponds to tau_f/tau_p ratio
-tau_f=mu_d*peak(1);
-cc=jet(nt);
-figure; 
+tau_f=0.9e6;
+cc=hot(nt);
+figure;
 % hold on;
-stress_init=zeros(size(xx))+prestress(1,1);%stress_init(nzs,nxs-nb_pt_patch:nxs+nb_pt_patch)=1.8001*10^6;
+stress_init=zeros(size(xx))+prestress(1,1);
 
-for i=1:nt
-    loading_rate=0.2e9;
+for i=1:500;%nt
+    loading_rate=0.05e9;
     
 %     txz_old=txz_old+loading_rate*dt;
     [vx_new,vz_new,txx_new,tzz_new,txz_new]=tnew_virieux(xx,zz,vx_old,vz_old,txx_old,tzz_old,txz_old,vx_new,vz_new,txx_new,tzz_new,txz_new,lambda,G,dt,rho);
@@ -79,48 +78,33 @@ for i=1:nt
 
     %% or spontaneous rupture
     u_interface_new=u_interface_old+vx_new(nzs,:)*dt;
-     for j=1:nx %go along interface
-         if (rup(j)==0); %check elements that have not broken yet
-         if (abs(txz_new(nzs,j)+prestress(j))>peak(j));   
-           rup(j)=1;
-         end;
-         end;
-     end
-     for j=1:nx;
-        if (rup(j)==1);
-            friction(j)=1-u_interface_new(j)*(1-mu_d)/Dc; 
-            if (friction(j)<mu_d) 
-                friction(j)=mu_d; 
-            end
-            txz_new(nzs,j)=peak(j)*friction(j)-prestress(j);
-
-%            if (vx_new(nzs,j)<0); %for a self-healing rupture
-%                rup(j)=0;
-%            end;
-        end
-     end
-     txz_new(nzs,txz_new(nzs,:)<(peak(1)*mu_d-prestress(1,1)))=peak(1)*mu_d-prestress(1,1);
-     txz_new(nzs,txz_new(nzs,:)>(peak(1)-prestress(1,1)))=peak(1)-prestress(1,1);
-     u_interface_old=u_interface_new;
-     
-    %to increase the loading
-    peak=peak-loading_rate*dt;     
+    rup(rup==0 & (abs(txz_new(nzs,:)+prestress)>tau_p))=1;
+    posrup(i,:)=diff(rup,1,2);
+    txz_new(nzs,rup==1)=tau_p-(tau_p-tau_f)/Dc*u_interface_new(rup==1)-prestress(rup==1);
+    txz_new(nzs,txz_new(nzs,:)<(tau_f-tau_0))=tau_f-tau_0;
+    u_interface_old=u_interface_new;
+    %to increase the loading 
+    tau_p=tau_p-loading_rate*dt;
     tau_f=tau_f-loading_rate*dt;
-    mu_d=(tau_f/peak(1));
+    
      %% plots
 %for stress at interface-------------
-    if rem(i*dt,1*dt)==0
-%         plot(xx(nzs,:),txz_new(nzs,:)+(i-1)*loading_rate*dt,'color',cc(round(i*nt/500),:))
-%         ylim([1e5,3e6])
-        stress2plt=txz_new+stress_init+(i-1)*loading_rate*dt;
-        surf(xx,zz,stress2plt,'edgecolor','none')
-        title([num2str(t(i)),'s'])
+    if rem(i*dt,3*dt)==0
+        plot(xx(nzs,:),tau_0+txz_new(nzs,:)+(i-1)*loading_rate*dt)%,'color',cc(round(i*nt/500),:))
+        ylim([tau_f,tau_p])
+%         stress2plt=txz_new+stress_init+(i-1)*loading_rate*dt;
+%         surf(xx,zz,stress2plt,'edgecolor','none')
+        title(['t=',num2str(t(i)),'s'])
 %         view(2)
 %         colorbar()
-%     zlim([tau_f, tau_p])
+%     zlim([0.9e6+(i-1)*loading_rate*dt, 1.9e6])
+%     caxis([1.4e6+(i-1)*loading_rate*dt, 1.7e6])
+%     xlabel('x (m)')
+%     ylabel('y (m)')
+%     zlabel('stress (MPa)')
         drawnow()
 %         writeVideo(myVideo, getframe); 
-%         hold on
+        hold on
     end
 %----------------------------------
 
@@ -136,7 +120,14 @@ for i=1:nt
     
     
 end
-
+% 
+figure(2)
+% surf(posrup,'edgecolor','none');view(2)
+[t1,x1]=find(posrup==-1);
+[t2,x2]=find(posrup==1);
+plot(t1,x1,t2,x2)
+% figure(3)
+% plot(t1,(x1-x2))
 % close(myVideo)
 
 function [vx_new,vz_new,txx_new,tzz_new,txz_new]=tnew_virieux(xx,zz,vx_old,vz_old,txx_old,tzz_old,txz_old,vx_new,vz_new,txx_new,tzz_new,txz_new,lambda,G,dt,rho)
